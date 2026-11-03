@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Exports de tokens et factures personnels, lus par usage_ia_claude
+usage/
+
+# OS
+Thumbs.db
+.DS_Store
