@@ -1,0 +1,42 @@
+{
+  "name": "mcp-pilotage",
+  "version": "1.0.0",
+  "description": "Serveur MCP en lecture seule qui cartographie tous les dépôts git de la machine pour les agents IA",
+  "main": "dist/index.js",
+  "type": "module",
+  "bin": {
+    "mcp-pilotage": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "test": "node tests/client-test.mjs"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "git",
+    "inventaire",
+    "claude"
+  ],
+  "author": "François Menguy (https://fmenguy.fr)",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.28.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fmenguy/mcp-pilotage.git"
+  },
+  "homepage": "https://github.com/fmenguy/mcp-pilotage#readme",
+  "engines": {
+    "node": ">=18"
+  }
+}
