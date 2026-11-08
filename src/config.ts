@@ -7,6 +7,7 @@
  * à maintenir à la main : l'inventaire vient toujours d'un scan du disque.
  */
 
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -97,6 +98,14 @@ export interface ConfigPilotage {
   tailleMaxFichier: number;
   /** Dossier contenant les exports d'usage de l'API Claude et les factures. */
   dossierUsage: string;
+  /** Dossier des sessions Codex (`rollout-*.jsonl` rangés par année, mois, jour). */
+  dossierCodex: string;
+  /** Dossier des projets Claude Code (un sous-dossier par projet, un `.jsonl` par session). */
+  dossierClaude: string;
+  /** Dossier des sessions Mistral Vibe (`unified/<session>/meta.json`). */
+  dossierVibe: string;
+  /** Dossier `.claude` du dépôt pilote, qui peut contenir `agent.lock` et `recaps/`. */
+  dossierPilote: string;
 }
 
 function lireListe(valeur: string | undefined, defaut: string[]): string[] {
@@ -105,6 +114,10 @@ function lireListe(valeur: string | undefined, defaut: string[]): string[] {
     .split(";")
     .map((v) => v.trim())
     .filter((v) => v.length > 0);
+}
+
+function lireChemin(valeur: string | undefined, defaut: string): string {
+  return valeur && valeur.trim() !== "" ? path.resolve(valeur.trim()) : defaut;
 }
 
 function lireEntier(valeur: string | undefined, defaut: number): number {
@@ -138,6 +151,10 @@ export function chargerConfig(env: NodeJS.ProcessEnv = process.env): ConfigPilot
       env.PILOTAGE_DOSSIER_USAGE && env.PILOTAGE_DOSSIER_USAGE.trim() !== ""
         ? path.resolve(env.PILOTAGE_DOSSIER_USAGE.trim())
         : DOSSIER_USAGE_DEFAUT,
+    dossierCodex: lireChemin(env.PILOTAGE_DOSSIER_CODEX, path.join(os.homedir(), ".codex", "sessions")),
+    dossierClaude: lireChemin(env.PILOTAGE_DOSSIER_CLAUDE, path.join(os.homedir(), ".claude", "projects")),
+    dossierVibe: lireChemin(env.PILOTAGE_DOSSIER_VIBE, path.join(os.homedir(), ".vibe", "logs", "session", "unified")),
+    dossierPilote: lireChemin(env.PILOTAGE_DOSSIER_PILOTE, path.join(racines[0], "strates-fmenguy", ".claude")),
   };
 }
 
