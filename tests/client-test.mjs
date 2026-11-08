@@ -66,6 +66,9 @@ async function main() {
     ["usage_ia_claude", {}],
     ["usage_ia_claude", { mois: "2026-07" }],
     ["usage_ia_claude", { mois: "2099-01" }],
+    ["suivi_agents", {}],
+    ["suivi_agents", { fenetre_minutes: 600, session: "astra", detail: 3 }],
+    ["suivi_agents", { fenetre_minutes: 10080, session: "vibe" }],
   ];
 
   const chronos = [];

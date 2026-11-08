@@ -25,6 +25,7 @@ L'inventaire vient d'un **scan du disque à chaque appel**, pas d'un fichier de 
 | `trouver_fichiers` | Recherche de fichiers par nom ou par motif glob à travers tous les dépôts. Complémentaire du précédent : localiser plutôt que fouiller. |
 | `diagnostic_pilotage` | Configuration effective du serveur : racines scannées, exclusions, moteur de recherche détecté, durée du scan complet. À appeler quand un résultat surprend. |
 | `usage_ia_claude` | Tokens consommés et factures de l'API Claude, lus depuis un dossier local (voir plus bas). Totaux, détail mois par mois, classement par projet et par modèle. Utile pour sourcer un article avec des chiffres réels. |
+| `suivi_agents` | Où en est chaque agent de code actif (Codex dont Astra, Claude Code, Mistral Vibe) : modèle, dossier, branche, dernière activité, dernières commandes résumées, fichiers modifiés, sous-agents. Section Processus : charge, suites de tests orphelines ou en doublon par clone. Paramètres `fenetre_minutes`, `session`, `detail`. |
 
 ## Garanties de sécurité
 
@@ -33,6 +34,7 @@ Le serveur est **en lecture seule par construction** :
 - aucun outil n'écrit, ne crée, ne supprime ni ne renomme de fichier ;
 - aucune commande git modifiante n'est utilisée, ni `add`, ni `commit`, ni `push`, ni `checkout`, ni `fetch`, ni `reset`. Seuls `rev-parse`, `log`, `status`, `branch`, `rev-list` et `config --get` sont appelés ;
 - aucun accès réseau ;
+- `suivi_agents` ne lit que la fin des journaux de session (jamais le fichier entier, jamais un message complet restitué) et interroge la liste des processus par `Get-CimInstance Win32_Process` : il ne tue aucun processus, ne change aucune priorité, n'écrit rien ;
 - les lectures restent confinées aux racines configurées, et un garde-fou refuse tout chemin qui sortirait du projet ciblé ;
 - les fichiers de secrets (`.env`, `.env.*`, `*.env`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, `id_ed25519*`) ne sont jamais fouillés par `chercher_partout`, y compris dans les dossiers hors git et sans ripgrep. Avec ripgrep, les `.gitignore` sont en plus respectés.
 
@@ -84,6 +86,10 @@ Tout est pilotable par variables d'environnement, dans le bloc `env` du `.mcp.js
 | `PILOTAGE_TIMEOUT_GIT_MS` | `15000` | Délai maximal d'une commande git. |
 | `PILOTAGE_TAILLE_MAX_FICHIER` | `1048576` | Taille maximale d'un fichier lu ou fouillé, en octets. |
 | `PILOTAGE_DOSSIER_USAGE` | `usage/` dans ce dépôt | Dossier lu par `usage_ia_claude` (voir ci-dessous). |
+| `PILOTAGE_DOSSIER_CODEX` | `~/.codex/sessions` | Journaux de session Codex lus par `suivi_agents`. |
+| `PILOTAGE_DOSSIER_CLAUDE` | `~/.claude/projects` | Journaux de session Claude Code lus par `suivi_agents`. |
+| `PILOTAGE_DOSSIER_VIBE` | `~/.vibe/logs/session/unified` | Sessions Mistral Vibe lues par `suivi_agents`. |
+| `PILOTAGE_DOSSIER_PILOTE` | `strates-fmenguy/.claude` dans la première racine | Dossier où `suivi_agents` regarde `agent.lock` et `recaps/`. |
 
 Exemple avec plusieurs racines :
 
@@ -134,6 +140,7 @@ Les dossiers `node_modules`, `.git`, `dist`, `build`, `.astro`, `venv`, `__pycac
 npm run dev                     # exécution directe des sources via tsx
 npm run build                   # compilation TypeScript vers dist/
 npm test                        # client MCP stdio qui appelle chaque outil et chronomètre
+node tests/suivi-agents.mjs [minutes] [filtre] [detail]   # appelle seulement suivi_agents sur les vrais journaux
 node tests/verif-accents.mjs    # contrôle de l'accentuation et de l'encodage UTF-8
 ```
 
@@ -155,6 +162,7 @@ src/
     git.ts            état git en lecture seule
     recherche.ts      recherche transverse, ripgrep avec repli Node
     usage.ts          lecture et agrégation des exports de tokens et des factures
+    agents.ts         journaux Codex, Claude Code et Vibe (fin de fichier seulement), processus vivants
   outils/             définition des outils MCP exposés
   utils/reponse.ts    formatage des réponses et garde-fou anti-plantage
 ```
