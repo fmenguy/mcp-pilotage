@@ -26,6 +26,7 @@ import { enregistrerOutilsCerveau } from "./outils/cerveau.js";
 import { enregistrerOutilsGit } from "./outils/git.js";
 import { enregistrerOutilsRecherche } from "./outils/recherche.js";
 import { enregistrerOutilsUsage } from "./outils/usage.js";
+import { enregistrerOutilsAgents } from "./outils/agents.js";
 
 const VERSION = "1.0.0";
 
@@ -42,6 +43,7 @@ async function main(): Promise<void> {
         "Ordre d'usage conseillé quand tu démarres sans contexte : apercu_ecosysteme pour la vue d'ensemble, puis decrire_projet et lire_cerveau sur le projet qui t'intéresse, etat_git pour savoir ce qui bouge, chercher_partout et trouver_fichiers pour localiser un sujet à travers les dépôts.",
         "usage_ia_claude donne les tokens consommés et les factures de l'API Claude de l'utilisateur, utile par exemple pour sourcer un article de blog avec des chiffres réels.",
         "L'inventaire vient d'un scan du disque à chaque appel, il n'y a aucun fichier de configuration à maintenir, donc l'information n'est jamais périmée.",
+        "suivi_agents dit où en est chaque agent de code actif (Codex, Claude Code, Mistral Vibe) et signale les suites de tests orphelines ou en doublon.",
         "Tous les outils sont strictement en lecture seule : ils n'écrivent, ne commitent et ne poussent jamais rien.",
       ].join(" "),
     }
@@ -52,6 +54,7 @@ async function main(): Promise<void> {
   enregistrerOutilsGit(server);
   enregistrerOutilsRecherche(server);
   enregistrerOutilsUsage(server);
+  enregistrerOutilsAgents(server);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
