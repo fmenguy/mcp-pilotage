@@ -28,7 +28,7 @@ L'inventaire vient d'un **scan du disque à chaque appel** (avec un cache court)
 | `chercher_partout` | Recherche de texte ou d'expression régulière dans le contenu de tous les dépôts à la fois, résultats groupés par projet avec fichier et numéro de ligne. |
 | `trouver_fichiers` | Recherche de fichiers par nom ou par motif glob à travers tous les dépôts. Complémentaire du précédent : localiser plutôt que fouiller. |
 | `diagnostic_pilotage` | Configuration effective du serveur : racines scannées, exclusions, moteur de recherche détecté, durée du scan complet. À appeler quand un résultat surprend. |
-| `usage_ia_claude` | Tokens consommés et factures de l'API Claude, lus depuis un dossier local (voir plus bas). Totaux, détail mois par mois, classement par projet et par modèle. Utile pour sourcer un article avec des chiffres réels. |
+| `usage_ia_claude` | Tokens consommés, coûts en dollars et factures de l'API Claude, lus depuis un dossier local (voir plus bas). Totaux, détail mois par mois, classement par projet et par modèle. Utile pour sourcer un article avec des chiffres réels. |
 | `suivi_agents` | Où en est chaque agent de code actif (Codex, Claude Code, Mistral Vibe) : modèle, dossier, branche, dernière activité, dernières commandes résumées, fichiers modifiés, sous-agents. Section Processus : charge du processeur, suites de tests orphelines ou en doublon par clone. Paramètres `fenetre_minutes`, `session`, `detail`. |
 
 ## Garanties de sécurité
@@ -110,10 +110,12 @@ claude mcp add pilotage --scope user -e "PILOTAGE_RACINES=C:/projets;E:/autres-p
 
 ## Le dossier d'usage de l'API Claude
 
-`usage_ia_claude` lit deux sortes de fichiers, déposés à la main, et ne les modifie jamais :
+`usage_ia_claude` lit quatre sortes de fichiers, déposés à la main, et ne les modifie jamais. Aucun n'est obligatoire, l'outil rend ce qu'il trouve :
 
 - un export CSV des tokens par mois, nommé `claude_api_tokens_AAAA_MM.csv` (export de la console Claude) ;
-- un fichier `factures.csv`, tenu à la main, car les factures mélangent abonnement et usage mesuré et ne se déduisent pas des tokens.
+- un export CSV des coûts par mois, nommé `claude_api_cost_AAAA_MM.csv` (page Coût de la console, flèche de téléchargement). Il donne des dollars par projet, modèle et type de coût (jetons, recherche web, exécution de code, session d'agent), mais pas de nombre de tokens ;
+- un fichier `factures.csv` (colonnes `date,echeance,total_eur,statut`), tenu à la main, pour les factures de claude.ai : elles mélangent abonnement et usage mesuré et ne se déduisent pas des tokens ;
+- un fichier `factures_api_claude.csv` (colonnes `date,numero,description,ht_usd,tva_usd,total_usd,statut`), tenu à la main, pour les recharges de crédit de la console, en dollars.
 
 Le dossier `usage/` de ce dépôt est ignoré par git : on peut y déposer ses fichiers sans risque de les publier, ou pointer ailleurs avec `PILOTAGE_DOSSIER_USAGE`. Sans fichier, l'outil répond qu'il n'a trouvé aucun export et indique le dossier attendu.
 
@@ -172,7 +174,7 @@ src/
     cerveau.ts        repérage et lecture des documents de contexte
     git.ts            état git en lecture seule
     recherche.ts      recherche transverse, ripgrep avec repli Node
-    usage.ts          lecture et agrégation des exports de tokens et des factures
+    usage.ts          lecture et agrégation des exports de tokens, de coûts et des factures
     agents.ts         journaux Codex, Claude Code et Vibe (fin de fichier seulement), processus vivants
   outils/             définition des outils MCP exposés
   utils/reponse.ts    formatage des réponses et garde-fou anti-plantage
@@ -215,7 +217,7 @@ The inventory comes from **a disk scan on every call** (with a short cache), not
 | `chercher_partout` | Text or regular expression search across the contents of every repository at once, results grouped by project with file and line number. |
 | `trouver_fichiers` | File search by name or glob pattern across every repository. The counterpart of the previous tool: locate rather than grep. |
 | `diagnostic_pilotage` | The server's effective configuration: scanned roots, exclusions, detected search engine, full scan duration. Call it when a result looks wrong. |
-| `usage_ia_claude` | Tokens consumed and invoices for the Claude API, read from a local folder (see below). Totals, month-by-month breakdown, ranking by project and by model. Handy for backing a blog post with real figures. |
+| `usage_ia_claude` | Tokens consumed, costs in dollars and invoices for the Claude API, read from a local folder (see below). Totals, month-by-month breakdown, ranking by project and by model. Handy for backing a blog post with real figures. |
 | `suivi_agents` | Status of each active coding agent (Codex, Claude Code, Mistral Vibe): model, folder, branch, last activity, summarized recent commands, modified files, subagents. A Processes section adds CPU load and flags orphaned or duplicate test runs per clone. Parameters `fenetre_minutes`, `session`, `detail`. |
 
 ## Safety guarantees
@@ -297,10 +299,12 @@ claude mcp add pilotage --scope user -e "PILOTAGE_RACINES=C:/projets;E:/other-pr
 
 ## The Claude API usage folder
 
-`usage_ia_claude` reads two kinds of files, dropped in by hand, and never modifies them:
+`usage_ia_claude` reads four kinds of files, dropped in by hand, and never modifies them. None is required, the tool returns whatever it finds:
 
 - a monthly CSV export of tokens, named `claude_api_tokens_YYYY_MM.csv` (exported from the Claude console);
-- a `factures.csv` file (invoices), kept by hand, because invoices mix subscription and metered usage and cannot be derived from token counts.
+- a monthly CSV export of costs, named `claude_api_cost_YYYY_MM.csv` (Cost page of the console, download arrow). It gives dollars per project, model and cost type (tokens, web search, code execution, agent session), but no token counts;
+- a `factures.csv` file (columns `date,echeance,total_eur,statut`), kept by hand, for claude.ai invoices: they mix subscription and metered usage and cannot be derived from token counts;
+- a `factures_api_claude.csv` file (columns `date,numero,description,ht_usd,tva_usd,total_usd,statut`), kept by hand, for console credit top-ups, in dollars.
 
 This repository's `usage/` folder is ignored by git, so you can drop your files there without any risk of publishing them, or point elsewhere with `PILOTAGE_DOSSIER_USAGE`. With no files, the tool replies that it found no export and gives the expected folder.
 
@@ -359,7 +363,7 @@ src/
     cerveau.ts        locating and reading context documents
     git.ts            read-only git status
     recherche.ts      cross-repository search, ripgrep with Node fallback
-    usage.ts          reading and aggregating token exports and invoices
+    usage.ts          reading and aggregating token exports, cost exports and invoices
     agents.ts         Codex, Claude Code and Vibe logs (tail only), live processes
   outils/             MCP tool definitions
   utils/reponse.ts    response formatting and crash guard
