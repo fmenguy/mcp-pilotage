@@ -20,8 +20,8 @@ L'inventaire vient d'un **scan du disque à chaque appel** (avec un cache court)
 
 | Outil | À quoi il sert |
 |---|---|
-| `apercu_ecosysteme` | Briefing de démarrage à froid. Synthèse markdown de tout l'écosystème, groupée par famille, avec rôle, pile, branche et fraîcheur git de chaque projet. C'est l'appel à faire en premier. |
-| `lister_projets` | Inventaire brut et filtrable : nom, chemin absolu, versionné ou non, pile, rôle résumé, documents de contexte disponibles. Filtres par terme libre et par famille. |
+| `apercu_ecosysteme` | Briefing de démarrage à froid. Synthèse markdown de tout l'écosystème, avec rôle, pile, branche et fraîcheur git de chaque projet, groupée par étiquette des favoris VS Code (voir plus bas) ou, à défaut, par famille. C'est l'appel à faire en premier. |
+| `lister_projets` | Inventaire brut et filtrable : nom, chemin absolu, versionné ou non, pile, rôle résumé, documents de contexte disponibles, favori. Filtres par terme libre, par famille et par étiquette de favori. |
 | `decrire_projet` | Fiche complète d'un seul projet : dépôt distant, dépendances marquantes, état git détaillé, derniers commits, branches, documents de contexte, arborescence de surface. |
 | `lire_cerveau` | Contenu des fichiers de contexte d'un projet : `CLAUDE.md`, `.claude/CLAUDE.md`, `AGENTS.md`, `.claude/AGENTS.md`, `README.md`, `ARCHITECTURE.md`, `CONTEXTE.md`, `ETAT-DES-LIEUX.md`, ou n'importe quel markdown de ses dossiers `docs`, `doc`, `notes`, `références`, `references`, `.claude`. Troncature réglable, mode liste sans contenu. |
 | `etat_git` | État git lu au moment de l'appel : branche, dernier commit, fichiers non commités, avance et retard sur la branche distante suivie, niveau d'activité. Sans argument, tableau de bord de tous les dépôts trié du plus récemment touché au plus ancien. Avec un projet, détail et historique. |
@@ -39,7 +39,7 @@ Le serveur est **en lecture seule par construction** :
 - aucune commande git modifiante n'est utilisée, ni `add`, ni `commit`, ni `push`, ni `checkout`, ni `fetch`, ni `reset`. Seuls `rev-parse`, `log`, `status`, `branch`, `rev-list` et `config --get` sont appelés ;
 - aucun accès réseau ;
 - `suivi_agents` ne lit que la fin des journaux de session (jamais le fichier entier, jamais un message complet restitué) et interroge la liste des processus et la charge du processeur par `Get-CimInstance` (`Win32_Process`, `Win32_Processor`) : il ne tue aucun processus, ne change aucune priorité, n'écrit rien ;
-- les lectures restent confinées aux racines configurées, et un garde-fou refuse tout chemin qui sortirait du projet ciblé ;
+- les lectures restent confinées aux racines configurées, et un garde-fou refuse tout chemin qui sortirait du projet ciblé. Seule exception, le fichier de favoris de Project Manager (`projects.json`), lu sans jamais être modifié ;
 - les fichiers de secrets (`.env`, `.env.*`, `*.env`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, `id_ed25519*`) ne sont jamais fouillés par `chercher_partout`, y compris dans les dossiers hors git et sans ripgrep. Avec ripgrep, les `.gitignore` sont en plus respectés.
 
 ## Prérequis
@@ -101,6 +101,7 @@ Tout est pilotable par variables d'environnement, dans le bloc `env` du `.mcp.js
 | `PILOTAGE_DOSSIER_CLAUDE` | `~/.claude/projects` | Journaux de session Claude Code lus par `suivi_agents`. |
 | `PILOTAGE_DOSSIER_VIBE` | `~/.vibe/logs/session/unified` | Sessions Mistral Vibe lues par `suivi_agents`. |
 | `PILOTAGE_DOSSIER_PILOTE` | `strates-fmenguy/.claude` dans la première racine | Dossier où `suivi_agents` regarde `agent.lock` et `recaps/`. Sans ce dossier, `agent.lock` est simplement signalé absent. |
+| `PILOTAGE_FAVORIS` | `projects.json` de Project Manager pour VS Code | Fichier de favoris lu pour les étiquettes (voir ci-dessous). `aucun` désactive la lecture. |
 
 Exemple avec plusieurs racines :
 
@@ -119,6 +120,15 @@ claude mcp add pilotage --scope user -e "PILOTAGE_RACINES=C:/projets;E:/autres-p
 
 Le dossier `usage/` de ce dépôt est ignoré par git : on peut y déposer ses fichiers sans risque de les publier, ou pointer ailleurs avec `PILOTAGE_DOSSIER_USAGE`. Sans fichier, l'outil répond qu'il n'a trouvé aucun export et indique le dossier attendu.
 
+## Les favoris VS Code
+
+Le scan du disque devine une famille à partir de la pile technique, mais pas le classement que l'on a en tête. Si l'extension [Project Manager](https://marketplace.visualstudio.com/items?itemName=alefragnani.project-manager) est installée, le serveur lit son fichier de favoris (`projects.json`, dans le `globalStorage` de VS Code) et rattache à chaque projet scanné :
+
+- ses **étiquettes** (`tags`), qui deviennent le regroupement de `apercu_ecosysteme` et le filtre `etiquette` de `lister_projets`. Un projet portant plusieurs étiquettes apparaît dans chacune, les projets absents des favoris sont rangés dans une section « Hors favoris » ;
+- le **nom du favori**, quand il diffère du nom du dossier. `decrire_projet` et les autres outils acceptent ce nom pour désigner le projet.
+
+Les favoris désactivés sont ignorés, et ceux dont le dossier n'existe plus ou sort des racines scannées sont signalés par `apercu_ecosysteme`, `lister_projets` et `diagnostic_pilotage`. Sans l'extension, ou avec `PILOTAGE_FAVORIS=aucun`, tout se comporte comme avant : regroupement par famille. `apercu_ecosysteme` garde d'ailleurs ce mode à portée avec `regroupement: "familles"`.
+
 ## Conventions d'écriture
 
 Deux registres cohabitent volontairement dans le code et dans les réponses :
@@ -126,7 +136,7 @@ Deux registres cohabitent volontairement dans le code et dans les réponses :
 - **Les identifiants restent en ASCII** : noms d'outils (`apercu_ecosysteme`), noms de paramètres (`rafraichir`, `seulement_modifies`), clés JSON des résultats (`depots_git`, `resultat_tronque`). C'est une convention de sérialisation stable, sur laquelle un appelant peut s'appuyer sans se soucier des accents.
 - **Tout ce qui se lit est écrit en français correct**, entièrement accentué : descriptions des outils, descriptions des paramètres, titres et en-têtes du markdown généré, messages d'état et d'erreur, valeurs de repli.
 
-Les filtres textuels (`filtre`, `famille`) comparent sans tenir compte des accents ni de la casse : `Ecriture et romans` et `Écriture et romans` donnent le même résultat, mais la valeur renvoyée reste toujours la forme correcte.
+Les filtres textuels (`filtre`, `famille`, `etiquette`) comparent sans tenir compte des accents ni de la casse : `Ecriture et romans` et `Écriture et romans` donnent le même résultat, mais la valeur renvoyée reste toujours la forme correcte.
 
 Le contenu extrait des fichiers des projets (rôles déduits d'un `CLAUDE.md` ou d'un `README`) est restitué **tel quel**, sans retouche.
 
@@ -170,6 +180,7 @@ src/
   core/
     fichiers.ts       parcours et lectures tolérantes aux erreurs, glob maison
     depots.ts         scan des racines, cache, résolution d'un projet par nom
+    favoris.ts        lecture des favoris et étiquettes de Project Manager
     stack.ts          détection de la pile technique et de la famille
     cerveau.ts        repérage et lecture des documents de contexte
     git.ts            état git en lecture seule
@@ -209,8 +220,8 @@ The inventory comes from **a disk scan on every call** (with a short cache), not
 
 | Tool | What it does |
 |---|---|
-| `apercu_ecosysteme` | Cold-start briefing. A markdown summary of the whole ecosystem, grouped by family, with each project's purpose, stack, branch and git freshness. This is the first call to make. |
-| `lister_projets` | Raw, filterable inventory: name, absolute path, versioned or not, stack, short purpose, available context documents. Filters by free text and by family. |
+| `apercu_ecosysteme` | Cold-start briefing. A markdown summary of the whole ecosystem, with each project's purpose, stack, branch and git freshness, grouped by VS Code favorite tag (see below) or, failing that, by family. This is the first call to make. |
+| `lister_projets` | Raw, filterable inventory: name, absolute path, versioned or not, stack, short purpose, available context documents, favorite. Filters by free text, by family and by favorite tag. |
 | `decrire_projet` | Full profile of one project: remote, notable dependencies, detailed git status, recent commits, branches, context documents, top-level tree. |
 | `lire_cerveau` | Contents of a project's context files: `CLAUDE.md`, `.claude/CLAUDE.md`, `AGENTS.md`, `.claude/AGENTS.md`, `README.md`, `ARCHITECTURE.md`, `CONTEXTE.md`, `ETAT-DES-LIEUX.md`, or any markdown file in its `docs`, `doc`, `notes`, `références`, `references` or `.claude` folders. Adjustable truncation, list-only mode. |
 | `etat_git` | Git status read at call time: branch, last commit, uncommitted files, ahead/behind counts against the tracked remote branch, activity level. With no argument, a dashboard of every repository sorted from most to least recently touched. With a project, details and history. |
@@ -228,7 +239,7 @@ The server is **read only by design**:
 - no git command that changes anything is used: no `add`, `commit`, `push`, `checkout`, `fetch` or `reset`. Only `rev-parse`, `log`, `status`, `branch`, `rev-list` and `config --get` are called;
 - no network access;
 - `suivi_agents` only reads the tail of session logs (never the whole file, never a full message returned) and queries the process list and CPU load through `Get-CimInstance` (`Win32_Process`, `Win32_Processor`): it kills no process, changes no priority, writes nothing;
-- reads stay inside the configured roots, and a guard rejects any path that would escape the target project;
+- reads stay inside the configured roots, and a guard rejects any path that would escape the target project. The one exception is Project Manager's favorites file (`projects.json`), which is read and never modified;
 - secret files (`.env`, `.env.*`, `*.env`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, `id_ed25519*`) are never searched by `chercher_partout`, including in non-git folders and without ripgrep. With ripgrep, `.gitignore` files are honored as well.
 
 ## Prerequisites
@@ -290,6 +301,7 @@ Everything is driven by environment variables, in the `env` block of `.mcp.json`
 | `PILOTAGE_DOSSIER_CLAUDE` | `~/.claude/projects` | Claude Code session logs read by `suivi_agents`. |
 | `PILOTAGE_DOSSIER_VIBE` | `~/.vibe/logs/session/unified` | Mistral Vibe sessions read by `suivi_agents`. |
 | `PILOTAGE_DOSSIER_PILOTE` | `strates-fmenguy/.claude` under the first root | Folder where `suivi_agents` looks for `agent.lock` and `recaps/`. If it does not exist, `agent.lock` is simply reported as absent. |
+| `PILOTAGE_FAVORIS` | Project Manager's `projects.json` for VS Code | Favorites file read for tags (see below). `aucun` turns it off. |
 
 Example with several roots:
 
@@ -308,6 +320,15 @@ claude mcp add pilotage --scope user -e "PILOTAGE_RACINES=C:/projets;E:/other-pr
 
 This repository's `usage/` folder is ignored by git, so you can drop your files there without any risk of publishing them, or point elsewhere with `PILOTAGE_DOSSIER_USAGE`. With no files, the tool replies that it found no export and gives the expected folder.
 
+## VS Code favorites
+
+The disk scan guesses a family from the tech stack, but not the grouping you have in mind. If the [Project Manager](https://marketplace.visualstudio.com/items?itemName=alefragnani.project-manager) extension is installed, the server reads its favorites file (`projects.json`, in VS Code's `globalStorage`) and attaches to each scanned project:
+
+- its **tags**, which become the grouping of `apercu_ecosysteme` and the `etiquette` filter of `lister_projets`. A project with several tags shows up under each, and projects that are not favorites go to a "Hors favoris" section;
+- the **favorite's name**, when it differs from the folder name. `decrire_projet` and the other tools accept that name to refer to the project.
+
+Disabled favorites are skipped, and favorites whose folder no longer exists or lies outside the scanned roots are reported by `apercu_ecosysteme`, `lister_projets` and `diagnostic_pilotage`. Without the extension, or with `PILOTAGE_FAVORIS=aucun`, everything behaves as before: grouping by family. `apercu_ecosysteme` also keeps that mode at hand with `regroupement: "familles"`.
+
 ## Writing conventions
 
 Two registers coexist on purpose in the code and in the answers:
@@ -315,7 +336,7 @@ Two registers coexist on purpose in the code and in the answers:
 - **Identifiers stay ASCII**: tool names (`apercu_ecosysteme`), parameter names (`rafraichir`, `seulement_modifies`), JSON result keys (`depots_git`, `resultat_tronque`). It is a stable serialization convention callers can rely on without worrying about accents.
 - **Everything meant to be read is proper, fully accented French**: tool descriptions, parameter descriptions, titles and headers of the generated markdown, status and error messages, fallback values.
 
-Text filters (`filtre`, `famille`) ignore accents and case: `Ecriture et romans` and `Écriture et romans` give the same result, but the returned value always keeps the correct spelling.
+Text filters (`filtre`, `famille`, `etiquette`) ignore accents and case: `Ecriture et romans` and `Écriture et romans` give the same result, but the returned value always keeps the correct spelling.
 
 Content extracted from project files (purposes taken from a `CLAUDE.md` or a `README`) is returned **as is**, untouched.
 
@@ -359,6 +380,7 @@ src/
   core/
     fichiers.ts       error-tolerant traversal and reads, home-made glob
     depots.ts         root scanning, cache, project lookup by name
+    favoris.ts        reading Project Manager favorites and tags
     stack.ts          tech stack and family detection
     cerveau.ts        locating and reading context documents
     git.ts            read-only git status

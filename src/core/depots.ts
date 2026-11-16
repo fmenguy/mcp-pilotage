@@ -12,6 +12,7 @@ import { config } from "../config.js";
 import { estDossier, estExclu, listerDossier } from "./fichiers.js";
 import { deduireRole, recenserCerveau, type RoleDeduit } from "./cerveau.js";
 import { detecterStack, lireConfigMcp, FAMILLES, type InfosStack } from "./stack.js";
+import { cleChemin, lireFavoris, type Favori, type LectureFavoris } from "./favoris.js";
 
 export interface Depot {
   /** Nom du dossier. */
@@ -30,13 +31,31 @@ export interface Depot {
   documentsPrioritaires: string[];
   /** Serveurs MCP déclarés dans le `.mcp.json` du dépôt. */
   serveursMcp: string[];
+  /**
+   * Favori Project Manager pointant sur ce dossier : noms donnés par
+   * l'utilisateur et étiquettes cumulées. Null si le dossier n'est pas en favori.
+   */
+  favori: { noms: string[]; etiquettes: string[] } | null;
   /** Problème rencontré pendant l'analyse, s'il y en a un. */
   probleme: string | null;
+}
+
+/** Favori dont le dossier n'apparaît pas dans l'inventaire. */
+export interface FavoriOrphelin extends Favori {
+  /** « introuvable » si le dossier n'existe pas, « hors racines » s'il existe hors des racines scannées. */
+  raison: "introuvable" | "hors racines";
+}
+
+/** Ce que les favoris apportent au dernier scan. */
+export interface EtatFavoris {
+  lecture: LectureFavoris;
+  orphelins: FavoriOrphelin[];
 }
 
 interface EntreeCache {
   horodatage: number;
   depots: Depot[];
+  favoris: EtatFavoris;
 }
 
 let cache: EntreeCache | null = null;
@@ -60,12 +79,42 @@ export async function inventorier(forcerRafraichissement = false): Promise<Depot
     return cache.depots;
   }
 
-  const candidats = await collecterCandidats();
+  const [candidats, lecture] = await Promise.all([collecterCandidats(), lireFavoris()]);
   const depots = await analyserEnParallele(candidats, 8);
+  const orphelins = await rattacherFavoris(depots, lecture.favoris);
 
   depots.sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
-  cache = { horodatage: Date.now(), depots };
+  cache = { horodatage: Date.now(), depots, favoris: { lecture, orphelins } };
   return depots;
+}
+
+/** Favoris lus lors du dernier scan, avec ceux qui ne correspondent à aucun projet. */
+export async function etatFavoris(forcerRafraichissement = false): Promise<EtatFavoris> {
+  await inventorier(forcerRafraichissement);
+  return cache!.favoris;
+}
+
+/**
+ * Attache à chaque projet les favoris qui pointent sur son dossier, et renvoie
+ * les favoris restés sans projet (dossier supprimé ou hors des racines).
+ */
+async function rattacherFavoris(depots: Depot[], favoris: Favori[]): Promise<FavoriOrphelin[]> {
+  const parChemin = new Map(depots.map((d) => [cleChemin(d.chemin), d] as const));
+  const orphelins: FavoriOrphelin[] = [];
+
+  for (const f of favoris) {
+    const depot = parChemin.get(cleChemin(f.chemin));
+    if (!depot) {
+      orphelins.push({ ...f, raison: (await estDossier(f.chemin)) ? "hors racines" : "introuvable" });
+      continue;
+    }
+    depot.favori ??= { noms: [], etiquettes: [] };
+    if (!depot.favori.noms.includes(f.nom)) depot.favori.noms.push(f.nom);
+    for (const e of f.etiquettes) {
+      if (!depot.favori.etiquettes.includes(e)) depot.favori.etiquettes.push(e);
+    }
+  }
+  return orphelins;
 }
 
 interface Candidat {
@@ -162,6 +211,7 @@ async function analyserDepot(candidat: Candidat): Promise<Depot> {
       documentsCerveau: documents.map((d) => d.chemin),
       documentsPrioritaires: documents.filter((d) => d.prioritaire).map((d) => d.chemin),
       serveursMcp,
+      favori: null,
       probleme: null,
     };
   } catch (err) {
@@ -182,6 +232,7 @@ async function analyserDepot(candidat: Candidat): Promise<Depot> {
       documentsCerveau: [],
       documentsPrioritaires: [],
       serveursMcp: [],
+      favori: null,
       probleme: `analyse impossible : ${err instanceof Error ? err.message : String(err)}`,
     };
   }
@@ -209,6 +260,9 @@ export async function resoudreDepot(
 
   const parPaquet = liste.find((d) => d.stack.nomPaquet?.toLowerCase() === ref);
   if (parPaquet) return parPaquet;
+
+  const parFavori = liste.find((d) => d.favori?.noms.some((n) => n.toLowerCase() === ref));
+  if (parFavori) return parFavori;
 
   const partiels = liste.filter((d) => d.nom.toLowerCase().includes(ref));
   if (partiels.length === 1) return partiels[0];

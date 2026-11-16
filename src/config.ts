@@ -11,6 +11,18 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+/** Emplacement par défaut du `projects.json` de l'extension VS Code Project Manager. */
+function fichierFavorisParDefaut(): string {
+  const relatif = path.join("Code", "User", "globalStorage", "alefragnani.project-manager", "projects.json");
+  if (process.platform === "win32") {
+    return path.join(process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming"), relatif);
+  }
+  if (process.platform === "darwin") {
+    return path.join(os.homedir(), "Library", "Application Support", relatif);
+  }
+  return path.join(os.homedir(), ".config", relatif);
+}
+
 /** Racine de ce dépôt : `dist/` (ou `src/` avec tsx) est un niveau en dessous. */
 const RACINE_DEPOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -106,6 +118,8 @@ export interface ConfigPilotage {
   dossierVibe: string;
   /** Dossier `.claude` du dépôt pilote, qui peut contenir `agent.lock` et `recaps/`. */
   dossierPilote: string;
+  /** `projects.json` de l'extension Project Manager, ou null si la lecture des favoris est désactivée. */
+  fichierFavoris: string | null;
 }
 
 function lireListe(valeur: string | undefined, defaut: string[]): string[] {
@@ -155,6 +169,10 @@ export function chargerConfig(env: NodeJS.ProcessEnv = process.env): ConfigPilot
     dossierClaude: lireChemin(env.PILOTAGE_DOSSIER_CLAUDE, path.join(os.homedir(), ".claude", "projects")),
     dossierVibe: lireChemin(env.PILOTAGE_DOSSIER_VIBE, path.join(os.homedir(), ".vibe", "logs", "session", "unified")),
     dossierPilote: lireChemin(env.PILOTAGE_DOSSIER_PILOTE, path.join(racines[0], "strates-fmenguy", ".claude")),
+    fichierFavoris:
+      env.PILOTAGE_FAVORIS?.trim().toLowerCase() === "aucun"
+        ? null
+        : lireChemin(env.PILOTAGE_FAVORIS, fichierFavorisParDefaut()),
   };
 }
 

@@ -6,7 +6,7 @@
 import path from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { inventorier, nomsDisponibles, resoudreDepot, type Depot } from "../core/depots.js";
+import { etatFavoris, inventorier, nomsDisponibles, resoudreDepot, type Depot } from "../core/depots.js";
 import { chercher, detecterRipgrep } from "../core/recherche.js";
 import { correspondGlob, parcourir } from "../core/fichiers.js";
 import { erreur, json, protege } from "../utils/reponse.js";
@@ -249,6 +249,7 @@ export function enregistrerOutilsRecherche(server: McpServer): void {
       const debut = Date.now();
       const depots = await inventorier(true);
       const dureeScan = Date.now() - debut;
+      const favoris = await etatFavoris();
       const rg = await detecterRipgrep();
 
       return json({
@@ -264,6 +265,14 @@ export function enregistrerOutilsRecherche(server: McpServer): void {
           : "parcours Node interne (ripgrep introuvable sur cette machine)",
         projets_detectes: depots.length,
         duree_scan_complet_ms: dureeScan,
+        favoris_vscode: {
+          fichier: favoris.lecture.fichier ?? "lecture désactivée",
+          lu: favoris.lecture.disponible,
+          probleme: favoris.lecture.probleme ?? undefined,
+          favoris: favoris.lecture.favoris.length,
+          projets_en_favori: depots.filter((d) => d.favori).length,
+          favoris_sans_projet: favoris.orphelins.map((f) => `${f.nom} (${f.chemin}, ${f.raison})`),
+        },
         variables_environnement_reconnues: [
           "PILOTAGE_RACINES (chemins séparés par des points-virgules)",
           "PILOTAGE_PROFONDEUR",
@@ -272,6 +281,12 @@ export function enregistrerOutilsRecherche(server: McpServer): void {
           "PILOTAGE_RIPGREP",
           "PILOTAGE_TIMEOUT_GIT_MS",
           "PILOTAGE_TAILLE_MAX_FICHIER",
+          "PILOTAGE_DOSSIER_USAGE",
+          "PILOTAGE_DOSSIER_CODEX",
+          "PILOTAGE_DOSSIER_CLAUDE",
+          "PILOTAGE_DOSSIER_VIBE",
+          "PILOTAGE_DOSSIER_PILOTE",
+          "PILOTAGE_FAVORIS (chemin du projects.json de Project Manager, ou « aucun »)",
         ],
         garanties: [
           "Lecture seule stricte : aucun outil n'écrit, ne crée, ne supprime ni ne renomme de fichier.",

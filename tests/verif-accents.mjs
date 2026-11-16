@@ -125,7 +125,7 @@ async function main() {
   }
 
   console.log("");
-  verifier(tools.length === 9, `9 outils déclarés (trouvés : ${tools.length})`);
+  verifier(tools.length === 10, `10 outils déclarés (trouvés : ${tools.length})`);
   verifier(
     minAccents >= 5,
     `chaque description a au moins 5 caractères accentués (minimum observé : ${minAccents})`

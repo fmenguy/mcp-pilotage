@@ -6,7 +6,15 @@
 import path from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { inventorier, nomsDisponibles, resoudreDepot, type Depot } from "../core/depots.js";
+import {
+  etatFavoris,
+  inventorier,
+  nomsDisponibles,
+  resoudreDepot,
+  type Depot,
+  type FavoriOrphelin,
+} from "../core/depots.js";
+import type { Favori } from "../core/favoris.js";
 import { recenserCerveau } from "../core/cerveau.js";
 import { lireEtatGit, lireHistorique, lireBranches, type EtatGit } from "../core/git.js";
 import { listerDossier, estExclu } from "../core/fichiers.js";
@@ -36,6 +44,7 @@ function fiche(d: Depot) {
     source_du_role: d.role.source,
     documents_de_contexte: d.documentsPrioritaires,
     serveurs_mcp_declares: d.serveursMcp.length > 0 ? d.serveursMcp : undefined,
+    favori: d.favori ? { noms: d.favori.noms, etiquettes: d.favori.etiquettes } : undefined,
     probleme: d.probleme ?? undefined,
   };
 }
@@ -44,6 +53,8 @@ function correspondFiltre(d: Depot, filtre: string): boolean {
   const terme = sansAccents(filtre);
   return (
     sansAccents(d.nom).includes(terme) ||
+    (d.favori?.noms.some((n) => sansAccents(n).includes(terme)) ?? false) ||
+    (d.favori?.etiquettes.some((e) => sansAccents(e).includes(terme)) ?? false) ||
     sansAccents(d.chemin).includes(terme) ||
     sansAccents(d.role.resume ?? "").includes(terme) ||
     sansAccents(d.stack.principale).includes(terme) ||
@@ -75,6 +86,12 @@ export function enregistrerOutilsInventaire(server: McpServer): void {
         .describe(
           `Ne garder qu'une famille fonctionnelle. Valeurs possibles : « ${Object.values(FAMILLES).join(" », « ")} ». La comparaison ignore la casse et les accents.`
         ),
+      etiquette: z
+        .string()
+        .optional()
+        .describe(
+          "Ne garder que les projets portant cette étiquette dans les favoris de l'extension VS Code Project Manager (par exemple « Android », « Blog », « Jeux »). C'est le classement choisi par François lui-même. La comparaison ignore la casse et les accents."
+        ),
       inclure_non_versionnes: z
         .boolean()
         .default(true)
@@ -88,14 +105,19 @@ export function enregistrerOutilsInventaire(server: McpServer): void {
           "Forcer un nouveau scan du disque en ignorant le cache interne (60 secondes). À utiliser si un projet vient d'être créé ou supprimé."
         ),
     },
-    protege("lister_projets", async ({ filtre, famille, inclure_non_versionnes, rafraichir }) => {
+    protege("lister_projets", async ({ filtre, famille, etiquette, inclure_non_versionnes, rafraichir }) => {
       const debut = Date.now();
       let depots = await inventorier(rafraichir);
+      const favoris = await etatFavoris();
 
       if (!inclure_non_versionnes) depots = depots.filter((d) => d.versionne);
       if (famille) {
         const f = sansAccents(famille);
         depots = depots.filter((d) => sansAccents(d.stack.famille) === f);
+      }
+      if (etiquette) {
+        const e = sansAccents(etiquette);
+        depots = depots.filter((d) => d.favori?.etiquettes.some((x) => sansAccents(x) === e));
       }
       if (filtre) depots = depots.filter((d) => correspondFiltre(d, filtre));
 
@@ -105,6 +127,8 @@ export function enregistrerOutilsInventaire(server: McpServer): void {
         dossiers_hors_git: depots.filter((d) => !d.versionne).length,
         duree_scan_ms: Date.now() - debut,
         lecture_seule: true,
+        etiquettes_des_favoris: favoris.lecture.disponible ? etiquettesConnues(favoris.lecture.favoris) : undefined,
+        favoris_sans_projet: favoris.orphelins.length > 0 ? favoris.orphelins.map(decrireOrphelin) : undefined,
         projets: depots.map(fiche),
       });
     })
@@ -114,7 +138,8 @@ export function enregistrerOutilsInventaire(server: McpServer): void {
   server.tool(
     "apercu_ecosysteme",
     [
-      "Briefing de démarrage à froid : une synthèse markdown compacte de tout l'écosystème de François, projets regroupés par famille, avec pour chacun son rôle, sa pile, sa branche courante et sa dernière activité git.",
+      "Briefing de démarrage à froid : une synthèse markdown compacte de tout l'écosystème de François, avec pour chaque projet son rôle, sa pile, sa branche courante et sa dernière activité git.",
+      "Les projets sont regroupés selon les étiquettes de ses favoris VS Code (Android, Blog, Jeux...), c'est-à-dire son propre classement, puis une section « Hors favoris » ; à défaut de favoris, par famille déduite de la pile technique.",
       "C'est l'outil à appeler au tout début d'une session quand tu arrives dans un dépôt sans contexte et que tu veux comprendre en un seul appel ce que François fabrique, combien de projets il a, lesquels sont vivants et lesquels dorment.",
       "Plus dense que lister_projets et déjà mis en forme. Si tu as besoin des données brutes pour les filtrer toi-même, utilise plutôt lister_projets.",
     ].join(" "),
@@ -125,12 +150,18 @@ export function enregistrerOutilsInventaire(server: McpServer): void {
         .describe(
           "Interroger git pour chaque dépôt (branche, date du dernier commit, niveau d'activité). Mettre à false rend la réponse quasi instantanée mais sans l'information de fraîcheur."
         ),
+      regroupement: z
+        .enum(["etiquettes", "familles"])
+        .default("etiquettes")
+        .describe(
+          "« etiquettes » : classement des favoris VS Code de François (retombe sur les familles si aucun favori n'est lisible). « familles » : regroupement par famille déduite de la pile technique."
+        ),
       rafraichir: z
         .boolean()
         .default(false)
         .describe("Forcer un nouveau scan du disque en ignorant le cache interne."),
     },
-    protege("apercu_ecosysteme", async ({ inclure_git, rafraichir }) => {
+    protege("apercu_ecosysteme", async ({ inclure_git, regroupement, rafraichir }) => {
       const debut = Date.now();
       const depots = await inventorier(rafraichir);
 
@@ -143,12 +174,42 @@ export function enregistrerOutilsInventaire(server: McpServer): void {
         for (const [chemin, etat] of resultats) etats.set(chemin, etat);
       }
 
-      const familles = new Map<string, Depot[]>();
-      for (const d of depots) {
-        const cle = d.stack.famille;
-        if (!familles.has(cle)) familles.set(cle, []);
-        familles.get(cle)!.push(d);
-      }
+      const favoris = await etatFavoris();
+      const parEtiquettes = regroupement === "etiquettes" && depots.some((d) => d.favori);
+
+      /** Ligne de tableau d'un projet. */
+      const ligneProjet = (d: Depot, avecFamille: boolean): string => {
+        const etat = etats.get(d.chemin);
+        let colonneGit = d.versionne ? "(non interrogé)" : "hors git";
+        if (d.versionne && etat) {
+          if (!etat.disponible) {
+            colonneGit = "illisible";
+          } else {
+            const modif =
+              etat.fichiersModifies > 0
+                ? `, ${etat.fichiersModifies} fichier(s) modifié(s)`
+                : "";
+            colonneGit = `${etat.branche ?? "?"}, ${etat.activite}, ${formaterAnciennete(etat.joursDepuisDernierCommit)}${modif}`;
+          }
+        }
+        const role = (d.role.resume ?? "rôle non documenté").replace(/\|/g, "/");
+        const autresNoms = (d.favori?.noms ?? []).filter((n) => n !== d.nom);
+        const nom = autresNoms.length > 0 ? `**${d.nom}** (favori « ${autresNoms.join(" », « ")} »)` : `**${d.nom}**`;
+        const pile = avecFamille ? `${d.stack.principale} (${d.stack.famille})` : d.stack.principale;
+        return `| ${nom} | \`${d.chemin}\` | ${pile} | ${role} | ${colonneGit} |`;
+      };
+
+      /** Ajoute une section titrée avec son tableau. */
+      const ajouterSection = (titreSection: string, projets: Depot[], avecFamille: boolean): void => {
+        lignes.push(`## ${titreSection}`);
+        lignes.push("");
+        lignes.push("| Projet | Chemin | Pile | Rôle | Git |");
+        lignes.push("|---|---|---|---|---|");
+        for (const d of [...projets].sort((a, b) => a.nom.localeCompare(b.nom, "fr"))) {
+          lignes.push(ligneProjet(d, avecFamille));
+        }
+        lignes.push("");
+      };
 
       const lignes: string[] = [];
       lignes.push("# Écosystème de François");
@@ -160,36 +221,38 @@ export function enregistrerOutilsInventaire(server: McpServer): void {
       );
       lignes.push("");
 
-      const ordreFamilles = [...familles.keys()].sort((a, b) => {
-        if (a === FAMILLES.autre) return 1;
-        if (b === FAMILLES.autre) return -1;
-        return a.localeCompare(b, "fr");
-      });
-
-      for (const famille of ordreFamilles) {
-        lignes.push(`## ${famille}`);
+      if (parEtiquettes) {
+        lignes.push(
+          "Classement par étiquette, tel que François l'a choisi dans ses favoris VS Code (extension Project Manager). Un projet portant plusieurs étiquettes apparaît dans chacune."
+        );
         lignes.push("");
-        lignes.push("| Projet | Chemin | Pile | Rôle | Git |");
-        lignes.push("|---|---|---|---|---|");
-        for (const d of familles.get(famille)!.sort((a, b) => a.nom.localeCompare(b.nom, "fr"))) {
-          const etat = etats.get(d.chemin);
-          let colonneGit = d.versionne ? "(non interrogé)" : "hors git";
-          if (d.versionne && etat) {
-            if (!etat.disponible) {
-              colonneGit = "illisible";
-            } else {
-              const modif =
-                etat.fichiersModifies > 0
-                  ? `, ${etat.fichiersModifies} fichier(s) modifié(s)`
-                  : "";
-              colonneGit = `${etat.branche ?? "?"}, ${etat.activite}, ${formaterAnciennete(etat.joursDepuisDernierCommit)}${modif}`;
-            }
-          }
-          const role = (d.role.resume ?? "rôle non documenté").replace(/\|/g, "/");
-          lignes.push(
-            `| **${d.nom}** | \`${d.chemin}\` | ${d.stack.principale} | ${role} | ${colonneGit} |`
-          );
+        for (const etiquette of etiquettesConnues(favoris.lecture.favoris)) {
+          const projets = depots.filter((d) => d.favori?.etiquettes.includes(etiquette));
+          if (projets.length > 0) ajouterSection(etiquette, projets, false);
         }
+        const sansEtiquette = depots.filter((d) => d.favori && d.favori.etiquettes.length === 0);
+        if (sansEtiquette.length > 0) ajouterSection("Favoris sans étiquette", sansEtiquette, false);
+        const horsFavoris = depots.filter((d) => !d.favori);
+        if (horsFavoris.length > 0) ajouterSection("Hors favoris", horsFavoris, true);
+      } else {
+        const familles = new Map<string, Depot[]>();
+        for (const d of depots) {
+          const cle = d.stack.famille;
+          if (!familles.has(cle)) familles.set(cle, []);
+          familles.get(cle)!.push(d);
+        }
+        const ordreFamilles = [...familles.keys()].sort((a, b) => {
+          if (a === FAMILLES.autre) return 1;
+          if (b === FAMILLES.autre) return -1;
+          return a.localeCompare(b, "fr");
+        });
+        for (const famille of ordreFamilles) ajouterSection(famille, familles.get(famille)!, false);
+      }
+
+      if (favoris.orphelins.length > 0) {
+        lignes.push(
+          `Favoris qui ne correspondent à aucun projet scanné : ${favoris.orphelins.map(decrireOrphelin).join(" ; ")}.`
+        );
         lignes.push("");
       }
 
@@ -265,6 +328,7 @@ export function enregistrerOutilsInventaire(server: McpServer): void {
         chemin: depot.chemin,
         versionne: depot.versionne,
         famille: depot.stack.famille,
+        favori: depot.favori ?? "absent des favoris VS Code",
         pile: {
           principale: depot.stack.principale,
           technologies: depot.stack.technologies,
@@ -301,6 +365,17 @@ export function enregistrerOutilsInventaire(server: McpServer): void {
       });
     })
   );
+}
+
+/** Étiquettes des favoris, dans l'ordre alphabétique, sans doublon. */
+function etiquettesConnues(favoris: Favori[]): string[] {
+  return [...new Set(favoris.flatMap((f) => f.etiquettes))].sort((a, b) => a.localeCompare(b, "fr"));
+}
+
+/** Description courte d'un favori sans projet. */
+function decrireOrphelin(f: FavoriOrphelin): string {
+  const cause = f.raison === "introuvable" ? "dossier introuvable" : "dossier hors des racines scannées";
+  return `« ${f.nom} » (${f.chemin}, ${cause})`;
 }
 
 /** Liste les entrées de premier niveau d'un projet, dossiers puis fichiers. */
