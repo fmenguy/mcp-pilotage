@@ -7,7 +7,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { inventorier, nomsDisponibles, resoudreDepot } from "../core/depots.js";
 import { lireDocument, recenserCerveau, type DocumentLu } from "../core/cerveau.js";
 import { cheminSurDansDepot } from "../core/fichiers.js";
-import { erreur, json, protege } from "../utils/reponse.js";
+import { erreur, json, lectureSeule, protege } from "../utils/reponse.js";
 
 export function enregistrerOutilsCerveau(server: McpServer): void {
   server.tool(
@@ -46,6 +46,7 @@ export function enregistrerOutilsCerveau(server: McpServer): void {
           "Budget de caractères par document. Au delà, le document est tronqué et signalé comme tel. Augmente cette valeur si un document important a été coupé."
         ),
     },
+    lectureSeule("Lire le cerveau d'un projet"),
     protege("lire_cerveau", async ({ projet, fichier, lister_seulement, max_caracteres }) => {
       const depots = await inventorier();
       const depot = await resoudreDepot(projet, depots);

@@ -17,7 +17,7 @@ import {
   lireLignesCouts,
   lireLignesTokens,
 } from "../core/usage.js";
-import { erreur, json, protege } from "../utils/reponse.js";
+import { erreur, json, lectureSeule, protege } from "../utils/reponse.js";
 
 const NOMS_MOIS = [
   "janvier", "février", "mars", "avril", "mai", "juin",
@@ -52,6 +52,7 @@ export function enregistrerOutilsUsage(server: McpServer): void {
           "Mois précis à isoler, au format AAAA-MM. Si absent, toute la période disponible est renvoyée."
         ),
     },
+    lectureSeule("Usage et factures de l'IA"),
     protege("usage_ia_claude", async ({ mois }) => {
       const debut = Date.now();
       const lignes = await lireLignesTokens();

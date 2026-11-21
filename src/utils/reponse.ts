@@ -42,6 +42,22 @@ export function erreur(message: string, indication?: string): ReponseMcp {
 }
 
 /**
+ * Annotations MCP communes à tous les outils du serveur : ils ne font que lire
+ * le disque local (aucune écriture, aucun effet de bord, aucun service distant).
+ * Les clients s'en servent pour autoriser l'outil sans demander à chaque appel.
+ * `titre` est le nom lisible affiché dans les interfaces.
+ */
+export function lectureSeule(titre: string) {
+  return {
+    title: titre,
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  };
+}
+
+/**
  * Encadre un handler d'outil pour qu'aucune exception ne remonte au transport.
  * Une erreur interne devient une réponse d'erreur lisible.
  */

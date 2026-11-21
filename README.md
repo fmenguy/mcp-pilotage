@@ -42,6 +42,8 @@ Le serveur est **en lecture seule par construction** :
 - les lectures restent confinées aux racines configurées, et un garde-fou refuse tout chemin qui sortirait du projet ciblé. Seule exception, le fichier de favoris de Project Manager (`projects.json`), lu sans jamais être modifié ;
 - les fichiers de secrets (`.env`, `.env.*`, `*.env`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, `id_ed25519*`) ne sont jamais fouillés par `chercher_partout`, y compris dans les dossiers hors git et sans ripgrep. Avec ripgrep, les `.gitignore` sont en plus respectés.
 
+Chaque outil le déclare aussi au client par les annotations MCP : `readOnlyHint` vrai, `destructiveHint` faux, `idempotentHint` vrai et `openWorldHint` faux, avec un titre lisible en français. Un client comme l'appli Claude peut ainsi les autoriser une fois pour toutes.
+
 ## Prérequis
 
 - Node.js 18 ou plus
@@ -243,6 +245,8 @@ The server is **read only by design**:
 - `suivi_agents` only reads the tail of session logs (never the whole file, never a full message returned) and queries the process list and CPU load through `Get-CimInstance` (`Win32_Process`, `Win32_Processor`): it kills no process, changes no priority, writes nothing;
 - reads stay inside the configured roots, and a guard rejects any path that would escape the target project. The one exception is Project Manager's favorites file (`projects.json`), which is read and never modified;
 - secret files (`.env`, `.env.*`, `*.env`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, `id_ed25519*`) are never searched by `chercher_partout`, including in non-git folders and without ripgrep. With ripgrep, `.gitignore` files are honored as well.
+
+Every tool also declares this to the client through MCP annotations: `readOnlyHint` true, `destructiveHint` false, `idempotentHint` true and `openWorldHint` false, with a readable French title. A client such as the Claude app can therefore allow them once and for all.
 
 ## Prerequisites
 

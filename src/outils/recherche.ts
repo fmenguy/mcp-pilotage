@@ -9,7 +9,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { etatFavoris, inventorier, nomsDisponibles, resoudreDepot, type Depot } from "../core/depots.js";
 import { chercher, detecterRipgrep } from "../core/recherche.js";
 import { correspondGlob, parcourir } from "../core/fichiers.js";
-import { erreur, json, protege } from "../utils/reponse.js";
+import { erreur, json, lectureSeule, protege } from "../utils/reponse.js";
 
 /** Résout la liste des projets à fouiller à partir du paramètre « projets ». */
 async function resoudreCibles(
@@ -88,6 +88,7 @@ export function enregistrerOutilsRecherche(server: McpServer): void {
           "Nombre maximal de correspondances conservées par fichier, pour éviter qu'un seul fichier ne monopolise le résultat."
         ),
     },
+    lectureSeule("Chercher dans tous les projets"),
     protege(
       "chercher_partout",
       async ({
@@ -188,6 +189,7 @@ export function enregistrerOutilsRecherche(server: McpServer): void {
           "Profondeur maximale de descente dans l'arborescence de chaque projet."
         ),
     },
+    lectureSeule("Trouver des fichiers"),
     protege("trouver_fichiers", async ({ motif, projets, max_resultats, profondeur }) => {
       const debut = Date.now();
       const depots = await inventorier();
@@ -244,6 +246,7 @@ export function enregistrerOutilsRecherche(server: McpServer): void {
       "Appelle cet outil quand un résultat te surprend (un projet manquant, une recherche vide, une lenteur) pour comprendre ce que le serveur voit réellement du disque avant de conclure.",
     ].join(" "),
     {},
+    lectureSeule("Diagnostic du serveur"),
     protege("diagnostic_pilotage", async () => {
       const { config } = await import("../config.js");
       const debut = Date.now();

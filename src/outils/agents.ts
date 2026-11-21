@@ -12,7 +12,7 @@ import {
   lireSessionsVibe,
   type SessionAgent,
 } from "../core/agents.js";
-import { protege, sansAccents, texte } from "../utils/reponse.js";
+import { lectureSeule, protege, sansAccents, texte } from "../utils/reponse.js";
 
 function ilYA(ms: number, maintenant: number): string {
   const min = Math.max(0, Math.round((maintenant - ms) / 60_000));
@@ -100,6 +100,7 @@ export function enregistrerOutilsAgents(server: McpServer): void {
         .default(8)
         .describe("Nombre d'actions récentes à lister par session. Défaut : 8."),
     },
+    lectureSeule("Suivre les agents de code"),
     protege("suivi_agents", async ({ fenetre_minutes, session, detail }) => {
       const maintenant = Date.now();
       const limite = maintenant - fenetre_minutes * 60_000;

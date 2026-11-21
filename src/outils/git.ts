@@ -6,7 +6,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { inventorier, nomsDisponibles, resoudreDepot, type Depot } from "../core/depots.js";
 import { lireEtatGit, lireHistorique } from "../core/git.js";
-import { erreur, formaterAnciennete, json, protege } from "../utils/reponse.js";
+import { erreur, formaterAnciennete, json, lectureSeule, protege } from "../utils/reponse.js";
 
 export function enregistrerOutilsGit(server: McpServer): void {
   server.tool(
@@ -40,6 +40,7 @@ export function enregistrerOutilsGit(server: McpServer): void {
           "Ne garder que les dépôts qui ont des modifications non commitées. Pratique pour répondre à la question : qu'est-ce que j'ai laissé en cours ?"
         ),
     },
+    lectureSeule("État git des projets"),
     protege("etat_git", async ({ projet, nb_commits, seulement_modifies }) => {
       const debut = Date.now();
       const depots = await inventorier();

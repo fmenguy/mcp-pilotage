@@ -23,7 +23,7 @@ import {
   erreur,
   formaterAnciennete,
   json,
-  protege,
+  lectureSeule, protege,
   sansAccents,
   texte,
 } from "../utils/reponse.js";
@@ -105,6 +105,7 @@ export function enregistrerOutilsInventaire(server: McpServer): void {
           "Forcer un nouveau scan du disque en ignorant le cache interne (60 secondes). À utiliser si un projet vient d'être créé ou supprimé."
         ),
     },
+    lectureSeule("Lister les projets"),
     protege("lister_projets", async ({ filtre, famille, etiquette, inclure_non_versionnes, rafraichir }) => {
       const debut = Date.now();
       let depots = await inventorier(rafraichir);
@@ -161,6 +162,7 @@ export function enregistrerOutilsInventaire(server: McpServer): void {
         .default(false)
         .describe("Forcer un nouveau scan du disque en ignorant le cache interne."),
     },
+    lectureSeule("Aperçu de l'écosystème"),
     protege("apercu_ecosysteme", async ({ inclure_git, regroupement, rafraichir }) => {
       const debut = Date.now();
       const depots = await inventorier(rafraichir);
@@ -300,6 +302,7 @@ export function enregistrerOutilsInventaire(server: McpServer): void {
           "Inclure la liste des dossiers et fichiers de premier niveau, pour situer l'organisation du projet."
         ),
     },
+    lectureSeule("Décrire un projet"),
     protege("decrire_projet", async ({ projet, nb_commits, inclure_arborescence }) => {
       const depots = await inventorier();
       const depot = await resoudreDepot(projet, depots);
