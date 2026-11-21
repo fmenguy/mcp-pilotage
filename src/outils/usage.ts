@@ -11,6 +11,7 @@ import {
   agregerPar,
   agregerParMois,
   centimes,
+  lireAbonnements,
   lireFactures,
   lireFacturesApi,
   lireLignesCouts,
@@ -36,6 +37,7 @@ export function enregistrerOutilsUsage(server: McpServer): void {
       "Usage de l'API Claude de l'utilisateur : tokens consommés, coûts en dollars et factures, lus en direct depuis le dossier usage/ (réglable par PILOTAGE_DOSSIER_USAGE).",
       "Deux sources d'usage, exportées de la console Claude et déposées à la main, un fichier par mois : les tokens (un token compte pour de l'entrée, cache compris, ou de la sortie) et les coûts en dollars (par projet, modèle et type : jetons, recherche web, exécution de code, session d'agent). Les mois couverts ne sont pas forcément les mêmes pour les deux.",
       "Factures, tenues à la main et indépendantes de l'usage : celles de claude.ai en euros (elles mélangent abonnement et usage mesuré) et celles des recharges de la console en dollars.",
+      "Renvoie aussi les abonnements IA (abonnements.csv : prix, jour de prélèvement, crédit API inclus, date de fin si résilié) et les factures OpenAI (factures_openai.csv), pour savoir quels forfaits courent encore.",
       "Sans paramètre, renvoie la période complète : totaux, détail mois par mois avec répartition par projet et par modèle, classements sur toute la période, et les factures.",
       "Avec « mois », se concentre sur un seul mois ; les factures restent toujours renvoyées en entier car leurs dates ne correspondent pas forcément au mois d'usage.",
       "Utile pour écrire un article de blog transparent sur le coût ou l'usage de l'IA : les chiffres sont prêts à citer, avec leurs libellés en clair.",
@@ -56,6 +58,21 @@ export function enregistrerOutilsUsage(server: McpServer): void {
       const lignesCouts = await lireLignesCouts();
       const factures = await lireFactures();
       const facturesApi = await lireFacturesApi();
+      const abonnements = await lireAbonnements();
+      const facturesOpenai = await lireFactures(undefined, "factures_openai.csv");
+      const aujourdhui = new Date().toISOString().slice(0, 10);
+      const enCours = abonnements.filter((a) => !a.fin || a.fin > aujourdhui);
+      const blocAbonnements = {
+        total_mensuel_eur: centimes(enCours.filter((a) => !a.fin).reduce((s, a) => s + a.prix_eur, 0)),
+        note: "Un abonnement avec une date de fin est résilié : plus de prélèvement, accès conservé jusqu'à cette date. Il sort du total mensuel.",
+        lignes: enCours,
+        termines: abonnements.filter((a) => a.fin && a.fin <= aujourdhui),
+      };
+      const blocFacturesOpenai = {
+        net_eur: centimes(facturesOpenai.reduce((s, f) => s + f.total_eur, 0)),
+        nombre: facturesOpenai.length,
+        lignes: facturesOpenai,
+      };
 
       const blocFactures = {
         net_eur: centimes(factures.reduce((s, f) => s + f.total_eur, 0)),
@@ -108,6 +125,8 @@ export function enregistrerOutilsUsage(server: McpServer): void {
             note: "Liste complète, non filtrée sur ce mois : voir la remarque sur les factures dans la description de l'outil.",
           },
           factures_api: blocFacturesApi,
+          abonnements: blocAbonnements,
+          factures_openai: blocFacturesOpenai,
           duree_ms: Date.now() - debut,
         });
       }
@@ -167,6 +186,8 @@ export function enregistrerOutilsUsage(server: McpServer): void {
             : null,
         factures: blocFactures,
         factures_api: blocFacturesApi,
+        abonnements: blocAbonnements,
+        factures_openai: blocFacturesOpenai,
         chemin_donnees: config.dossierUsage,
         duree_ms: Date.now() - debut,
       });

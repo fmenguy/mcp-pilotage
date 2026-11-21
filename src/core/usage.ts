@@ -178,11 +178,43 @@ export async function lireLignesTokens(
   return lignes;
 }
 
-/** Lit le fichier de factures, tenu à la main dans le dossier usage. */
-export async function lireFactures(
+export interface Abonnement {
+  nom: string;
+  prix_eur: number;
+  jour: number | null; // jour du prélèvement dans le mois
+  depuis: string | null;
+  fin: string | null; // abonnement résilié : accès conservé jusqu'à cette date, plus de prélèvement
+  credit_api_usd: number | null;
+  credit_associe: boolean;
+  usage: string | null;
+}
+
+/** Lit les abonnements IA, tenus à la main dans `abonnements.csv` (colonne `fin` facultative). */
+export async function lireAbonnements(
   dossier = config.dossierUsage
+): Promise<Abonnement[]> {
+  const contenu = await lireTexte(path.join(dossier, "abonnements.csv"));
+  if (contenu === null) return [];
+  return parserCsv(contenu.replace(/^\u{FEFF}/u, ""))
+    .filter((r) => r.nom)
+    .map((r) => ({
+      nom: r.nom,
+      prix_eur: nombre(r.prix_eur),
+      jour: nombre(r.jour) || null,
+      depuis: r.depuis || null,
+      fin: r.fin || null,
+      credit_api_usd: nombre(r.credit_api_usd) || null,
+      credit_associe: ["oui", "o", "true", "1"].includes((r.credit_associe ?? "").toLowerCase()),
+      usage: r.usage || null,
+    }));
+}
+
+/** Lit un fichier de factures en euros (date, echeance, total_eur, statut), tenu à la main dans le dossier usage. */
+export async function lireFactures(
+  dossier = config.dossierUsage,
+  nomFichier = "factures.csv"
 ): Promise<LigneFacture[]> {
-  const chemin = path.join(dossier, "factures.csv");
+  const chemin = path.join(dossier, nomFichier);
   if (!(await existe(chemin))) return [];
   const contenu = await lireTexte(chemin);
   if (contenu === null) return [];

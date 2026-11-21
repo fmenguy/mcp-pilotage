@@ -111,12 +111,14 @@ claude mcp add pilotage --scope user -e "PILOTAGE_RACINES=C:/projets;E:/autres-p
 
 ## Le dossier d'usage de l'API Claude
 
-`usage_ia_claude` lit quatre sortes de fichiers, déposés à la main, et ne les modifie jamais. Aucun n'est obligatoire, l'outil rend ce qu'il trouve :
+`usage_ia_claude` lit six sortes de fichiers, déposés à la main, et ne les modifie jamais. Aucun n'est obligatoire, l'outil rend ce qu'il trouve :
 
 - un export CSV des tokens par mois, nommé `claude_api_tokens_AAAA_MM.csv` (export de la console Claude) ;
 - un export CSV des coûts par mois, nommé `claude_api_cost_AAAA_MM.csv` (page Coût de la console, flèche de téléchargement). Il donne des dollars par projet, modèle et type de coût (jetons, recherche web, exécution de code, session d'agent), mais pas de nombre de tokens ;
 - un fichier `factures.csv` (colonnes `date,echeance,total_eur,statut`), tenu à la main, pour les factures de claude.ai : elles mélangent abonnement et usage mesuré et ne se déduisent pas des tokens ;
-- un fichier `factures_api_claude.csv` (colonnes `date,numero,description,ht_usd,tva_usd,total_usd,statut`), tenu à la main, pour les recharges de crédit de la console, en dollars.
+- un fichier `factures_api_claude.csv` (colonnes `date,numero,description,ht_usd,tva_usd,total_usd,statut`), tenu à la main, pour les recharges de crédit de la console, en dollars ;
+- un fichier `abonnements.csv` (colonnes `nom,prix_eur,jour,depuis,credit_api_usd,jour_credit,credit_associe,usage,fin`), tenu à la main, pour les forfaits IA. La colonne `fin`, facultative, marque un abonnement résilié : il sort du total mensuel, puis de la liste une fois la date passée ;
+- un fichier `factures_openai.csv`, aux mêmes colonnes que `factures.csv`, pour les factures OpenAI.
 
 Le dossier `usage/` de ce dépôt est ignoré par git : on peut y déposer ses fichiers sans risque de les publier, ou pointer ailleurs avec `PILOTAGE_DOSSIER_USAGE`. Sans fichier, l'outil répond qu'il n'a trouvé aucun export et indique le dossier attendu.
 
@@ -311,12 +313,14 @@ claude mcp add pilotage --scope user -e "PILOTAGE_RACINES=C:/projets;E:/other-pr
 
 ## The Claude API usage folder
 
-`usage_ia_claude` reads four kinds of files, dropped in by hand, and never modifies them. None is required, the tool returns whatever it finds:
+`usage_ia_claude` reads six kinds of files, dropped in by hand, and never modifies them. None is required, the tool returns whatever it finds:
 
 - a monthly CSV export of tokens, named `claude_api_tokens_YYYY_MM.csv` (exported from the Claude console);
 - a monthly CSV export of costs, named `claude_api_cost_YYYY_MM.csv` (Cost page of the console, download arrow). It gives dollars per project, model and cost type (tokens, web search, code execution, agent session), but no token counts;
 - a `factures.csv` file (columns `date,echeance,total_eur,statut`), kept by hand, for claude.ai invoices: they mix subscription and metered usage and cannot be derived from token counts;
-- a `factures_api_claude.csv` file (columns `date,numero,description,ht_usd,tva_usd,total_usd,statut`), kept by hand, for console credit top-ups, in dollars.
+- a `factures_api_claude.csv` file (columns `date,numero,description,ht_usd,tva_usd,total_usd,statut`), kept by hand, for console credit top-ups, in dollars;
+- an `abonnements.csv` file (columns `nom,prix_eur,jour,depuis,credit_api_usd,jour_credit,credit_associe,usage,fin`), kept by hand, for AI plans. The optional `fin` column marks a cancelled plan: it leaves the monthly total, then the list once the date has passed;
+- a `factures_openai.csv` file, with the same columns as `factures.csv`, for OpenAI invoices.
 
 This repository's `usage/` folder is ignored by git, so you can drop your files there without any risk of publishing them, or point elsewhere with `PILOTAGE_DOSSIER_USAGE`. With no files, the tool replies that it found no export and gives the expected folder.
 
