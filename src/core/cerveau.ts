@@ -128,11 +128,20 @@ export function extraireResume(markdown: string, longueurMax = 300): string | nu
   const paragraphe: string[] = [];
   const puces: string[] = [];
   let dansCodeFence = false;
+  let dansParagrapheHtml = false;
+  let sectionConsigne = false;
 
   for (let i = 0; i < lignes.length; i++) {
     const brute = lignes[i];
     const ligne = brute.trim();
     const suivante = (lignes[i + 1] ?? "").trim();
+
+    // Paragraphe HTML (README centré) : on le suit jusqu'à sa balise fermante.
+    if (dansParagrapheHtml) {
+      paragraphe.push(ligne);
+      if (/<\/p>/i.test(ligne)) break;
+      continue;
+    }
 
     // Bloc de code indenté : ce sont des commandes, pas une description.
     // Un vrai paragraphe markdown commence en colonne zéro.
@@ -153,8 +162,29 @@ export function extraireResume(markdown: string, longueurMax = 300): string | nu
     if (paragraphe.length === 0) {
       // On cherche le début du premier paragraphe utile.
       if (ligne === "") continue;
-      if (ligne.startsWith("#")) continue;
-      if (ligne.startsWith("<")) continue; // en-tête HTML, bloc centré, badges
+      if (ligne.startsWith("#")) {
+        // Une section de consignes (« à lire avant », « règles ») ne décrit pas le projet.
+        sectionConsigne = /lire avant|à lire|a lire|règles|regles/i.test(ligne);
+        continue;
+      }
+      if (sectionConsigne) continue;
+      if (ligne.startsWith("<")) {
+        // Un <p> qui porte du vrai texte (hors liens) est la description d'un README centré.
+        const texteHorsLiens = ligne
+          .replace(/<a\b[^>]*>[\s\S]*?<\/a>/gi, "")
+          .replace(/<[^>]+>/g, "")
+          .replace(/[·|•\s]/g, "");
+        if (/^<p\b/i.test(ligne) && texteHorsLiens.length >= 20) {
+          paragraphe.push(ligne);
+          dansParagrapheHtml = !/<\/p>/i.test(ligne);
+          if (!dansParagrapheHtml) break;
+        }
+        continue; // sinon : en-tête HTML, bloc centré, badges
+      }
+      // Sélecteur de langue d'un README bilingue : « 🇫🇷 Français · 🇬🇧 English ».
+      if (/[\u{1F1E6}-\u{1F1FF}]{2}/u.test(ligne) && ligne.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").length < 80) continue;
+      // Consigne de lecture plutôt que description.
+      if (/^(à|a) lire\b/i.test(ligne)) continue;
       if (/^[-*_=]{3,}$/.test(ligne)) continue;
       if (/^!\[/.test(ligne)) continue; // ligne de badges ou d'images
       if (/^\[!\[/.test(ligne)) continue; // badge cliquable
@@ -197,6 +227,8 @@ export function extraireResume(markdown: string, longueurMax = 300): string | nu
     .replace(/\*(.*?)\*/g, "$1")
     .replace(/`([^`]*)`/g, "$1")
     .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<[^>]+>/g, "") // balises HTML résiduelles (<b>, </p>...)
     .replace(/\s+/g, " ")
     .trim();
 

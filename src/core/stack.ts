@@ -47,6 +47,8 @@ export const FAMILLES = {
   front: "Application front",
   python: "Outil et script Python",
   statique: "Page ou jeu web statique",
+  mobile: "Application Android",
+  unity: "Projet Unity",
   autre: "Autre",
 } as const;
 
@@ -115,6 +117,69 @@ const MANIFESTES = [
   "vite.config.js",
   "next.config.js",
 ];
+
+/** Marqueurs lus dans les fichiers Gradle (scripts de build et catalogue de versions). */
+const SIGNATURES_GRADLE: Array<[RegExp, string]> = [
+  [/kotlin/i, "Kotlin"],
+  [/compose/i, "Jetpack Compose"],
+  [/arcore|sceneview/i, "ARCore"],
+  [/mediapipe/i, "MediaPipe"],
+  [/firebase/i, "Firebase"],
+];
+
+const FICHIERS_GRADLE = ["settings.gradle.kts", "settings.gradle", "build.gradle.kts", "build.gradle"];
+
+/**
+ * Projet Gradle (Android, Kotlin ou Java), à la racine ou dans un sous-dossier
+ * `android/` (appli embarquée dans un dépôt de site, ou dépôt rangé ainsi).
+ * Le code Kotlin vit trop profond (app/src/main/java/...) pour le comptage des
+ * extensions : seuls les fichiers de build font foi.
+ */
+async function detecterGradle(
+  racine: string
+): Promise<{ sousDossier: boolean; android: boolean; technologies: string[] } | null> {
+  for (const [dossier, sousDossier] of [[racine, false], [path.join(racine, "android"), true]] as const) {
+    const entrees = await listerDossier(dossier);
+    const noms = new Set(entrees.filter((e) => e.isFile()).map((e) => e.name.toLowerCase()));
+    if (!FICHIERS_GRADLE.some((f) => noms.has(f))) continue;
+
+    let contenu = "";
+    for (const rel of [
+      ...FICHIERS_GRADLE,
+      "app/build.gradle.kts",
+      "app/build.gradle",
+      "gradle/libs.versions.toml",
+    ]) {
+      contenu += (await lireTexte(path.join(dossier, rel))) ?? "";
+    }
+    const android =
+      /com\.android\.|\bandroid\s*\{/.test(contenu) ||
+      (await lireTexte(path.join(dossier, "app/src/main/AndroidManifest.xml"))) !== null;
+    const technologies = SIGNATURES_GRADLE.filter(([re]) => re.test(contenu)).map(([, l]) => l);
+    return { sousDossier, android, technologies };
+  }
+  return null;
+}
+
+/** Projet Unity : version de l'éditeur et pipeline de rendu, à la racine ou dans `unity/`. */
+async function detecterUnity(
+  racine: string
+): Promise<{ sousDossier: boolean; version: string | null; technologies: string[] } | null> {
+  for (const [dossier, sousDossier] of [[racine, false], [path.join(racine, "unity"), true]] as const) {
+    const version = await lireTexte(path.join(dossier, "ProjectSettings", "ProjectVersion.txt"));
+    if (version === null) continue;
+    const manifeste = (await lireTexte(path.join(dossier, "Packages", "manifest.json"))) ?? "";
+    const technologies = ["C#"];
+    if (manifeste.includes("render-pipelines.universal")) technologies.push("URP");
+    if (manifeste.includes("render-pipelines.high-definition")) technologies.push("HDRP");
+    return {
+      sousDossier,
+      version: version.match(/m_EditorVersion:\s*(\S+)/)?.[1] ?? null,
+      technologies,
+    };
+  }
+  return null;
+}
 
 /** Extrait la valeur d'une clé simple dans un TOML plat (nom, description). */
 function lireCleToml(contenu: string, cle: string): string | null {
@@ -194,7 +259,35 @@ export async function detecterStack(racine: string): Promise<InfosStack> {
   // --- Autres piles ---
   if (fichiersRacine.has("cargo.toml")) principale = "Rust";
   if (fichiersRacine.has("go.mod")) principale = "Go";
-  if (fichiersRacine.has("pom.xml") || fichiersRacine.has("build.gradle")) principale = "Java";
+  if (fichiersRacine.has("pom.xml")) principale = "Java";
+
+  // Gradle : une appli à la racine définit le projet ; dans `android/`, elle
+  // ne prend la main que si rien d'autre n'a été reconnu (fmenguy reste Astro).
+  const gradle = await detecterGradle(racine);
+  if (gradle) {
+    const pile = gradle.android
+      ? `Android / ${gradle.technologies.includes("Kotlin") ? "Kotlin" : "Java"}`
+      : gradle.technologies.includes("Kotlin") ? "Kotlin (Gradle)" : "Java (Gradle)";
+    if (!gradle.sousDossier || principale === PILE_INDETERMINEE) {
+      principale = pile;
+      technologies.unshift(...gradle.technologies.filter((t) => t !== "Kotlin"));
+    } else {
+      technologies.push(`appli ${pile}`);
+    }
+  }
+
+  const unity = await detecterUnity(racine);
+  if (unity) {
+    if (!unity.sousDossier || principale === PILE_INDETERMINEE) {
+      // Depuis Unity 6, l'éditeur est numéroté 6000.x : on affiche le nom commercial.
+      const majeure = Number.parseInt(unity.version ?? "", 10);
+      principale = Number.isFinite(majeure) ? `Unity ${majeure >= 6000 ? majeure / 1000 : majeure}` : "Unity";
+      technologies.unshift(...unity.technologies);
+    } else {
+      technologies.push("Unity");
+    }
+  }
+
   if (entrees.some((e) => e.isFile() && e.name.toLowerCase().endsWith(".csproj"))) {
     principale = ".NET";
     technologies.push("C#");
@@ -282,6 +375,8 @@ function deduireFamille(
   if (cheminBas.includes(`${path.sep}histoires${path.sep}`) || dossiersRacine.has("chapitres")) {
     return FAMILLES.ecriture;
   }
+  if (principale.startsWith("Android")) return FAMILLES.mobile;
+  if (principale.startsWith("Unity")) return FAMILLES.unity;
   if (principale === "Astro" || technologies.includes("Next.js")) return FAMILLES.site;
   if (technologies.includes("FastAPI") || technologies.includes("Flask") || technologies.includes("Django")) {
     return FAMILLES.backend;
