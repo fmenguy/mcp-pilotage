@@ -29,6 +29,7 @@ L'inventaire vient d'un **scan du disque à chaque appel** (avec un cache court)
 | `trouver_fichiers` | Recherche de fichiers par nom ou par motif glob à travers tous les dépôts. Complémentaire du précédent : localiser plutôt que fouiller. |
 | `diagnostic_pilotage` | Configuration effective du serveur : racines scannées, exclusions, moteur de recherche détecté, durée du scan complet. À appeler quand un résultat surprend. |
 | `usage_ia_claude` | Tokens consommés, coûts en dollars et factures de l'API Claude, lus depuis un dossier local (voir plus bas). Totaux, détail mois par mois, classement par projet et par modèle. Utile pour sourcer un article avec des chiffres réels. |
+| `tokens_agents` | Tokens réellement consommés par Claude Code, Codex et Mistral Vibe, lus dans leurs journaux de session locaux sur une fenêtre de N jours (30 par défaut). Répartition par agent, projet, modèle et jour, avec la part relue depuis le cache. Filtres `agent` et `projet`. Premier appel en quelques secondes, les suivants sont servis par un cache par fichier. |
 | `suivi_agents` | Où en est chaque agent de code actif (Codex, Claude Code, Mistral Vibe) : modèle, dossier, branche, dernière activité, dernières commandes résumées, fichiers modifiés, sous-agents. Section Processus : charge du processeur, suites de tests orphelines ou en doublon par clone. Paramètres `fenetre_minutes`, `session`, `detail`. |
 
 ## Garanties de sécurité
@@ -99,9 +100,9 @@ Tout est pilotable par variables d'environnement, dans le bloc `env` du `.mcp.js
 | `PILOTAGE_TIMEOUT_GIT_MS` | `15000` | Délai maximal d'une commande git. |
 | `PILOTAGE_TAILLE_MAX_FICHIER` | `1048576` | Taille maximale d'un fichier lu ou fouillé, en octets. |
 | `PILOTAGE_DOSSIER_USAGE` | `usage/` dans ce dépôt | Dossier lu par `usage_ia_claude` (voir ci-dessous). |
-| `PILOTAGE_DOSSIER_CODEX` | `~/.codex/sessions` | Journaux de session Codex lus par `suivi_agents`. |
-| `PILOTAGE_DOSSIER_CLAUDE` | `~/.claude/projects` | Journaux de session Claude Code lus par `suivi_agents`. |
-| `PILOTAGE_DOSSIER_VIBE` | `~/.vibe/logs/session/unified` | Sessions Mistral Vibe lues par `suivi_agents`. |
+| `PILOTAGE_DOSSIER_CODEX` | `~/.codex/sessions` | Journaux de session Codex lus par `suivi_agents` et `tokens_agents` (ce dernier lit aussi `archived_sessions` à côté). |
+| `PILOTAGE_DOSSIER_CLAUDE` | `~/.claude/projects` | Journaux de session Claude Code lus par `suivi_agents` et `tokens_agents`. |
+| `PILOTAGE_DOSSIER_VIBE` | `~/.vibe/logs/session/unified` | Sessions Mistral Vibe lues par `suivi_agents` et `tokens_agents`. |
 | `PILOTAGE_DOSSIER_PILOTE` | `strates-fmenguy/.claude` dans la première racine | Dossier où `suivi_agents` regarde `agent.lock` et `recaps/`. Sans ce dossier, `agent.lock` est simplement signalé absent. |
 | `PILOTAGE_FAVORIS` | `projects.json` de Project Manager pour VS Code | Fichier de favoris lu pour les étiquettes (voir ci-dessous). `aucun` désactive la lecture. |
 
@@ -233,6 +234,7 @@ The inventory comes from **a disk scan on every call** (with a short cache), not
 | `trouver_fichiers` | File search by name or glob pattern across every repository. The counterpart of the previous tool: locate rather than grep. |
 | `diagnostic_pilotage` | The server's effective configuration: scanned roots, exclusions, detected search engine, full scan duration. Call it when a result looks wrong. |
 | `usage_ia_claude` | Tokens consumed, costs in dollars and invoices for the Claude API, read from a local folder (see below). Totals, month-by-month breakdown, ranking by project and by model. Handy for backing a blog post with real figures. |
+| `tokens_agents` | Tokens actually consumed by Claude Code, Codex and Mistral Vibe, read from their local session logs over an N day window (30 by default). Breakdown by agent, project, model and day, with the share read from cache. `agent` and `projet` filters. The first call takes a few seconds, later ones are served from a per file cache. |
 | `suivi_agents` | Status of each active coding agent (Codex, Claude Code, Mistral Vibe): model, folder, branch, last activity, summarized recent commands, modified files, subagents. A Processes section adds CPU load and flags orphaned or duplicate test runs per clone. Parameters `fenetre_minutes`, `session`, `detail`. |
 
 ## Safety guarantees
@@ -303,9 +305,9 @@ Everything is driven by environment variables, in the `env` block of `.mcp.json`
 | `PILOTAGE_TIMEOUT_GIT_MS` | `15000` | Maximum duration of a git command. |
 | `PILOTAGE_TAILLE_MAX_FICHIER` | `1048576` | Maximum size of a file read or searched, in bytes. |
 | `PILOTAGE_DOSSIER_USAGE` | `usage/` in this repository | Folder read by `usage_ia_claude` (see below). |
-| `PILOTAGE_DOSSIER_CODEX` | `~/.codex/sessions` | Codex session logs read by `suivi_agents`. |
-| `PILOTAGE_DOSSIER_CLAUDE` | `~/.claude/projects` | Claude Code session logs read by `suivi_agents`. |
-| `PILOTAGE_DOSSIER_VIBE` | `~/.vibe/logs/session/unified` | Mistral Vibe sessions read by `suivi_agents`. |
+| `PILOTAGE_DOSSIER_CODEX` | `~/.codex/sessions` | Codex session logs read by `suivi_agents` and `tokens_agents` (the latter also reads `archived_sessions` next to it). |
+| `PILOTAGE_DOSSIER_CLAUDE` | `~/.claude/projects` | Claude Code session logs read by `suivi_agents` and `tokens_agents`. |
+| `PILOTAGE_DOSSIER_VIBE` | `~/.vibe/logs/session/unified` | Mistral Vibe sessions read by `suivi_agents` and `tokens_agents`. |
 | `PILOTAGE_DOSSIER_PILOTE` | `strates-fmenguy/.claude` under the first root | Folder where `suivi_agents` looks for `agent.lock` and `recaps/`. If it does not exist, `agent.lock` is simply reported as absent. |
 | `PILOTAGE_FAVORIS` | Project Manager's `projects.json` for VS Code | Favorites file read for tags (see below). `aucun` turns it off. |
 

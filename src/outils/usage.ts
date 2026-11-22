@@ -17,7 +17,8 @@ import {
   lireLignesCouts,
   lireLignesTokens,
 } from "../core/usage.js";
-import { erreur, json, lectureSeule, protege } from "../utils/reponse.js";
+import { lireTokensAgents } from "../core/tokens.js";
+import { erreur, json, lectureSeule, protege, sansAccents } from "../utils/reponse.js";
 
 const NOMS_MOIS = [
   "janvier", "février", "mars", "avril", "mai", "juin",
@@ -190,6 +191,118 @@ export function enregistrerOutilsUsage(server: McpServer): void {
         abonnements: blocAbonnements,
         factures_openai: blocFacturesOpenai,
         chemin_donnees: config.dossierUsage,
+        duree_ms: Date.now() - debut,
+      });
+    })
+  );
+
+  server.tool(
+    "tokens_agents",
+    [
+      "Tokens réellement consommés par les trois agents de code de l'utilisateur (Claude Code, Codex, Mistral Vibe), lus dans leurs journaux de session locaux, sur une fenêtre glissante de N jours.",
+      "Complète usage_ia_claude, qui ne couvre que l'API Claude exportée de la console : ici on voit l'usage des abonnements, agent par agent, projet par projet, modèle par modèle et jour par jour.",
+      "Convention commune aux trois agents : entree (entrée plein tarif, écriture du cache comprise), entree_cache (entrée relue depuis le cache, bien moins chère), sortie (raisonnement compris). Le total additionne les trois, comme le rapport de session de Claude Code.",
+      "Le projet est le dépôt qui contient le dossier de travail de la session ; un worktree est rattaché à son dépôt principal tant qu'il existe encore, sinon il garde le nom de son dossier.",
+      "Premier appel lent (plusieurs Go de journaux), les suivants sont rapides grâce au cache par fichier. Strictement en lecture.",
+    ].join(" "),
+    {
+      jours: z.number().int().min(1).max(365).default(30).describe("Fenêtre en jours, aujourd'hui compris. 30 par défaut."),
+      agent: z.enum(["Claude Code", "Codex", "Mistral Vibe"]).optional().describe("Limiter à un seul agent."),
+      projet: z.string().optional().describe("Limiter à un projet (nom de dépôt, sans tenir compte de la casse ni des accents)."),
+    },
+    lectureSeule("Tokens des agents de code"),
+    protege("tokens_agents", async ({ jours, agent, projet }) => {
+      const debut = Date.now();
+      const depuis = new Date();
+      depuis.setHours(0, 0, 0, 0);
+      depuis.setDate(depuis.getDate() - (jours - 1));
+      const { lignes: toutes, sources } = await lireTokensAgents(depuis.getTime());
+      const filtreProjet = projet ? sansAccents(projet) : null;
+      const lignes = toutes.filter(
+        (l) => (!agent || l.agent === agent) && (!filtreProjet || sansAccents(l.projet) === filtreProjet)
+      );
+      if (lignes.length === 0) {
+        return erreur(
+          "Aucun usage trouvé sur cette période avec ces filtres.",
+          `Journaux lus : ${Object.values(sources).flat().join(" ; ")}.`
+        );
+      }
+
+      const totalDe = (l: { entree: number; entree_cache: number; sortie: number }) => l.entree + l.entree_cache + l.sortie;
+      const grandTotal = lignes.reduce((s, l) => s + totalDe(l), 0);
+      const part = (v: number) => (grandTotal > 0 ? Math.round((v / grandTotal) * 1000) / 10 : 0);
+      const somme = (ls: typeof lignes) => {
+        const entree = ls.reduce((s, l) => s + l.entree, 0);
+        const entree_cache = ls.reduce((s, l) => s + l.entree_cache, 0);
+        const sortie = ls.reduce((s, l) => s + l.sortie, 0);
+        const total = entree + entree_cache + sortie;
+        return {
+          total,
+          part_pct: part(total),
+          entree,
+          entree_cache,
+          sortie,
+          cache_pct: entree + entree_cache > 0 ? Math.round((entree_cache / (entree + entree_cache)) * 1000) / 10 : 0,
+          appels: ls.reduce((s, l) => s + l.appels, 0),
+          sessions: new Set(ls.map((l) => l.session)).size,
+          jours_actifs: new Set(ls.map((l) => l.jour)).size,
+        };
+      };
+      const grouper = <K extends string>(cle: (l: (typeof lignes)[number]) => K) => {
+        const m = new Map<K, typeof lignes>();
+        for (const l of lignes) {
+          const k = cle(l);
+          if (!m.has(k)) m.set(k, []);
+          m.get(k)!.push(l);
+        }
+        return m;
+      };
+      const agents = ["Claude Code", "Codex", "Mistral Vibe"] as const;
+
+      const parAgent = [...grouper((l) => l.agent).entries()]
+        .map(([nom, ls]) => ({ agent: nom, ...somme(ls) }))
+        .sort((a, b) => b.total - a.total);
+      const parProjet = [...grouper((l) => l.projet).entries()]
+        .map(([nom, ls]) => {
+          const s = somme(ls);
+          const detail: Record<string, number> = {};
+          for (const a of agents) {
+            const t = ls.filter((l) => l.agent === a).reduce((x, l) => x + totalDe(l), 0);
+            if (t > 0) detail[a] = t;
+          }
+          return { projet: nom, total: s.total, part_pct: s.part_pct, sessions: s.sessions, par_agent: detail };
+        })
+        .sort((a, b) => b.total - a.total);
+      const parModele = [...grouper((l) => `${l.agent}|${l.modele}`).entries()]
+        .map(([cle, ls]) => {
+          const [nomAgent, modele] = cle.split("|");
+          const s = somme(ls);
+          return { agent: nomAgent, modele, total: s.total, part_pct: s.part_pct, appels: s.appels };
+        })
+        .sort((a, b) => b.total - a.total);
+      const parJour = [...grouper((l) => l.jour).entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([jour, ls]) => {
+          const ligne: Record<string, string | number> = { jour, total: 0 };
+          for (const a of agents) {
+            const t = ls.filter((l) => l.agent === a).reduce((x, l) => x + totalDe(l), 0);
+            if (t > 0) ligne[a] = t;
+            ligne.total = (ligne.total as number) + t;
+          }
+          return ligne;
+        });
+
+      return json({
+        periode: { du: parJour[0]?.jour, au: parJour[parJour.length - 1]?.jour, fenetre_jours: jours },
+        filtres: { agent: agent ?? null, projet: projet ?? null },
+        convention:
+          "total = entree + entree_cache + sortie. entree : plein tarif, écriture du cache comprise. entree_cache : relue depuis le cache. sortie : raisonnement compris. Codex et Vibe comptent le cache dans leur entrée brute, il en est retiré ici pour aligner les trois agents.",
+        total: somme(lignes),
+        par_agent: parAgent,
+        par_projet: parProjet.slice(0, 30),
+        par_modele: parModele,
+        par_jour: parJour,
+        sources,
         duree_ms: Date.now() - debut,
       });
     })

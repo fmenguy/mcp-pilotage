@@ -41,7 +41,7 @@ async function main(): Promise<void> {
         "Ce serveur cartographie tous les projets de l'utilisateur présents sur sa machine.",
         "Il est conçu pour être branché dans n'importe lequel de ses dépôts : il te permet de découvrir seul l'écosystème complet, sans que l'utilisateur ait à te le décrire.",
         "Ordre d'usage conseillé quand tu démarres sans contexte : apercu_ecosysteme pour la vue d'ensemble, puis decrire_projet et lire_cerveau sur le projet qui t'intéresse, etat_git pour savoir ce qui bouge, chercher_partout et trouver_fichiers pour localiser un sujet à travers les dépôts.",
-        "usage_ia_claude donne les tokens consommés et les factures de l'API Claude de l'utilisateur, utile par exemple pour sourcer un article de blog avec des chiffres réels.",
+        "usage_ia_claude donne les tokens consommés et les factures de l'API Claude de l'utilisateur, utile par exemple pour sourcer un article de blog avec des chiffres réels. tokens_agents donne les tokens réellement consommés par Claude Code, Codex et Mistral Vibe, lus dans leurs journaux locaux, par agent, projet, modèle et jour.",
         "L'inventaire vient d'un scan du disque à chaque appel, il n'y a aucun fichier de configuration à maintenir, donc l'information n'est jamais périmée.",
         "suivi_agents dit où en est chaque agent de code actif (Codex, Claude Code, Mistral Vibe) et signale les suites de tests orphelines ou en doublon.",
         "Tous les outils sont strictement en lecture seule : ils n'écrivent, ne commitent et ne poussent jamais rien.",
